@@ -20,6 +20,11 @@ export function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
     setError('');
 
     try {
+      if (!supabase) {
+        setError('Authentication is unavailable in this preview.');
+        return;
+      }
+
       if (mode === 'signup') {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;

@@ -104,6 +104,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!supabase) return;
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user || null);
     });
@@ -608,7 +610,7 @@ export default function App() {
 
               {/* Auth */}
               {user ? (
-                <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass hover:bg-ink-750/60 transition-colors">
+                <button onClick={() => supabase?.auth.signOut()} className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass hover:bg-ink-750/60 transition-colors">
                   <User className="w-4 h-4 text-gray-400" />
                   <span className="hidden md:inline text-sm text-gray-300">Sign Out</span>
                 </button>
