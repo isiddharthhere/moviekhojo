@@ -289,12 +289,13 @@ async function fetchCatalogAction(action: string): Promise<CatalogItem[]> {
 
   try {
     const res = await edgeFetch(url, 8000);
-    if (!res.ok) return [];
+    if (!res.ok) return localFallback();
     const data: TMDBResponse = await res.json();
-    return (data.results || []).map(tmdbToCatalogItem);
+    const items = (data.results || []).map(tmdbToCatalogItem);
+    return items.length > 0 ? items : localFallback();
   } catch (err) {
     console.warn(`[${action}] error:`, err);
-    return [];
+    return localFallback();
   }
 }
 
@@ -352,26 +353,18 @@ export async function discoverContent(params: DiscoverParams): Promise<CatalogIt
     }
     const url = `${SUPABASE_URL}/functions/v1/tmdb-search?${sp.toString()}`;
     const res = await edgeFetch(url, 8000);
-    if (!res.ok) return [];
+    if (!res.ok) return fetchCatalogAction(params.contentType === 'web_series_tv' ? 'popular-tv' : 'popular-movies');
     const data: TMDBResponse = await res.json();
-    return (data.results || []).map(tmdbToCatalogItem);
+    const items = (data.results || []).map(tmdbToCatalogItem);
+    return items.length > 0 ? items : fetchCatalogAction(params.contentType === 'web_series_tv' ? 'popular-tv' : 'popular-movies');
   } catch (err) {
     console.warn('[discover] error:', err);
-    return [];
+    return fetchCatalogAction(params.contentType === 'web_series_tv' ? 'popular-tv' : 'popular-movies');
   }
 }
 
-export async function fetchHindiDubbed(): Promise<CatalogItem[]> {
-  try {
-    const url = `${SUPABASE_URL}/functions/v1/tmdb-search?action=hindi-dubbed`;
-    const res = await edgeFetch(url, 8000);
-    if (!res.ok) return [];
-    const data: TMDBResponse = await res.json();
-    return (data.results || []).map(tmdbToCatalogItem);
-  } catch (err) {
-    console.warn('[hindiDubbed] error:', err);
-    return [];
-  }
+export function fetchHindiDubbed(): Promise<CatalogItem[]> {
+  return fetchCatalogAction('hindi-dubbed');
 }
 
 export async function webSearch(query: string): Promise<WebResult[]> {
