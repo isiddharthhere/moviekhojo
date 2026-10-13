@@ -32,8 +32,21 @@ export interface WebResult {
   snippet: string;
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL?.trim();
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+const SUPABASE_URL = (
+  import.meta.env.VITE_SUPABASE_URL ||
+  import.meta.env.SUPABASE_URL ||
+  ''
+).trim();
+const SUPABASE_ANON_KEY = (
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  import.meta.env.SUPABASE_ANON_KEY ||
+  ''
+).trim();
+const TMDB_API_KEY = (
+  import.meta.env.VITE_TMDB_API_KEY ||
+  import.meta.env.TMDB_API_KEY ||
+  ''
+).trim();
 const HAS_EDGE_SEARCH = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
 function localFallback(options: FuzzySearchOptions = {}): CatalogItem[] {
@@ -41,8 +54,42 @@ function localFallback(options: FuzzySearchOptions = {}): CatalogItem[] {
 }
 
 function endpoint(action: string, params = ''): string | null {
-  if (!HAS_EDGE_SEARCH || !SUPABASE_URL) return null;
-  return `${SUPABASE_URL}/functions/v1/tmdb-search?action=${action}${params}`;
+  if (HAS_EDGE_SEARCH && SUPABASE_URL) {
+    return `${SUPABASE_URL}/functions/v1/tmdb-search?action=${action}${params}`;
+  }
+  if (TMDB_API_KEY) return `tmdb://${action}${params}`;
+  return null;
+}
+
+function tmdbPath(action: string): string {
+  switch (action) {
+    case 'trending': return '/trending/all/week';
+    case 'popular-movies': return '/movie/popular';
+    case 'popular-tv': return '/tv/popular';
+    case 'top-rated': return '/movie/top_rated';
+    case 'popular-anime': return '/discover/tv?with_genres=16&with_original_language=ja';
+    case 'new-releases': return '/movie/now_playing';
+    case 'hindi-dubbed': return '/discover/movie?with_original_language=hi';
+    default: return '/search/multi';
+  }
+}
+
+function mapDirectTMDBResult(item: any): TMDBResult {
+  const isTV = item.media_type === 'tv' || Boolean(item.first_air_date);
+  return {
+    tmdbId: Number(item.id) || 0,
+    title: item.title || item.name || 'Untitled',
+    type: isTV ? 'web_series' : 'movie',
+    year: Number((item.release_date || item.first_air_date || '').slice(0, 4)) || 0,
+    poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '',
+    backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : '',
+    overview: item.overview || 'No overview available.',
+    rating: Number(item.vote_average) || 0,
+    genres: [],
+    offers: [],
+    trailerKey: null,
+    cast: [],
+  };
 }
 
 function mapContentType(tmdbType: string): CatalogItem['type'] {
@@ -94,19 +141,40 @@ function tmdbToCatalogItem(r: TMDBResult): CatalogItem {
 }
 
 async function edgeFetch(url: string, timeoutMs = 8000): Promise<Response> {
-  if (!HAS_EDGE_SEARCH) throw new Error('Supabase movie search is not configured');
   const controller = new AbortController();
+  const isDirectTMDB = url.startsWith('tmdb://');
+  let requestUrl = url;
+  let headers: HeadersInit = { 'Content-Type': 'application/json' };
+
+  if (isDirectTMDB) {
+    const separator = url.indexOf('?');
+    const action = url.slice('tmdb://'.length, separator === -1 ? undefined : separator);
+    const params = separator === -1 ? '' : url.slice(separator);
+    const tmdbParams = new URLSearchParams(params);
+    if (action === 'search') tmdbParams.set('query', tmdbParams.get('query') || '');
+    tmdbParams.set('api_key', TMDB_API_KEY);
+    requestUrl = `https://api.themoviedb.org/3${tmdbPath(action)}${tmdbPath(action).includes('?') ? '&' : '?'}${tmdbParams.toString()}`;
+    headers = { 'Content-Type': 'application/json' };
+  } else if (!HAS_EDGE_SEARCH) {
+    throw new Error('Movie API is not configured');
+  } else {
+    headers = {
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+    };
+  }
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const res = await fetch(requestUrl, { signal: controller.signal, headers });
     clearTimeout(timeout);
-    return res;
+    if (!isDirectTMDB) return res;
+    if (!res.ok) return res;
+    const raw = await res.json();
+    const results = (raw.results || []).map(mapDirectTMDBResult);
+    return new Response(JSON.stringify({ results, latencyMs: 0, source: 'tmdb' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (err) {
     clearTimeout(timeout);
     throw err;

@@ -1,7 +1,11 @@
 import type { AIRecommendationResponse, AIRecommendation, CatalogItem } from '@/types';
 import { LOCAL_CATALOG } from '@/data/catalog';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
+const GEMINI_API_KEY = (
+  import.meta.env.VITE_GEMINI_API_KEY ||
+  import.meta.env.GEMINI_API_KEY ||
+  ''
+).trim();
 const GEMINI_MODEL = 'gemini-1.5-flash';
 
 export interface LazyModeResult {
