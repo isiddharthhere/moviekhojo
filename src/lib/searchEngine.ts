@@ -283,87 +283,43 @@ function applyFilters(items: CatalogItem[], options: FuzzySearchOptions): Catalo
   return filtered;
 }
 
-export async function fetchTrending(): Promise<CatalogItem[]> {
-  try {
-    const url = `${SUPABASE_URL}/functions/v1/tmdb-search?action=trending`;
-    const res = await edgeFetch(url, 8000);
-    if (!res.ok) {
-      console.warn('[trending] edge function returned:', res.status);
-      return [];
-    }
-    const data: TMDBResponse = await res.json();
-    if (data.results && data.results.length > 0) {
-      return data.results.map(tmdbToCatalogItem);
-    }
-  } catch (err) {
-    console.warn('[trending] error:', err);
-  }
-  return [];
-}
+async function fetchCatalogAction(action: string): Promise<CatalogItem[]> {
+  const url = endpoint(action);
+  if (!url) return localFallback();
 
-export async function fetchPopularMovies(): Promise<CatalogItem[]> {
   try {
-    const url = `${SUPABASE_URL}/functions/v1/tmdb-search?action=popular-movies`;
     const res = await edgeFetch(url, 8000);
     if (!res.ok) return [];
     const data: TMDBResponse = await res.json();
     return (data.results || []).map(tmdbToCatalogItem);
   } catch (err) {
-    console.warn('[popularMovies] error:', err);
+    console.warn(`[${action}] error:`, err);
     return [];
   }
 }
 
-export async function fetchPopularTV(): Promise<CatalogItem[]> {
-  try {
-    const url = `${SUPABASE_URL}/functions/v1/tmdb-search?action=popular-tv`;
-    const res = await edgeFetch(url, 8000);
-    if (!res.ok) return [];
-    const data: TMDBResponse = await res.json();
-    return (data.results || []).map(tmdbToCatalogItem);
-  } catch (err) {
-    console.warn('[popularTV] error:', err);
-    return [];
-  }
+export function fetchTrending(): Promise<CatalogItem[]> {
+  return fetchCatalogAction('trending');
 }
 
-export async function fetchTopRated(): Promise<CatalogItem[]> {
-  try {
-    const url = `${SUPABASE_URL}/functions/v1/tmdb-search?action=top-rated`;
-    const res = await edgeFetch(url, 8000);
-    if (!res.ok) return [];
-    const data: TMDBResponse = await res.json();
-    return (data.results || []).map(tmdbToCatalogItem);
-  } catch (err) {
-    console.warn('[topRated] error:', err);
-    return [];
-  }
+export function fetchPopularMovies(): Promise<CatalogItem[]> {
+  return fetchCatalogAction('popular-movies');
 }
 
-export async function fetchPopularAnime(): Promise<CatalogItem[]> {
-  try {
-    const url = `${SUPABASE_URL}/functions/v1/tmdb-search?action=popular-anime`;
-    const res = await edgeFetch(url, 8000);
-    if (!res.ok) return [];
-    const data: TMDBResponse = await res.json();
-    return (data.results || []).map(tmdbToCatalogItem);
-  } catch (err) {
-    console.warn('[popularAnime] error:', err);
-    return [];
-  }
+export function fetchPopularTV(): Promise<CatalogItem[]> {
+  return fetchCatalogAction('popular-tv');
 }
 
-export async function fetchNewReleases(): Promise<CatalogItem[]> {
-  try {
-    const url = `${SUPABASE_URL}/functions/v1/tmdb-search?action=new-releases`;
-    const res = await edgeFetch(url, 8000);
-    if (!res.ok) return [];
-    const data: TMDBResponse = await res.json();
-    return (data.results || []).map(tmdbToCatalogItem);
-  } catch (err) {
-    console.warn('[newReleases] error:', err);
-    return [];
-  }
+export function fetchTopRated(): Promise<CatalogItem[]> {
+  return fetchCatalogAction('top-rated');
+}
+
+export function fetchPopularAnime(): Promise<CatalogItem[]> {
+  return fetchCatalogAction('popular-anime');
+}
+
+export function fetchNewReleases(): Promise<CatalogItem[]> {
+  return fetchCatalogAction('new-releases');
 }
 
 export interface DiscoverParams {
@@ -390,6 +346,10 @@ export async function discoverContent(params: DiscoverParams): Promise<CatalogIt
       region: params.region,
       sort: params.sort,
     });
+    if (!HAS_EDGE_SEARCH) {
+      const fallbackAction = params.contentType === 'web_series_tv' ? 'popular-tv' : params.sort === 'top_rated' ? 'top-rated' : 'popular-movies';
+      return fetchCatalogAction(fallbackAction);
+    }
     const url = `${SUPABASE_URL}/functions/v1/tmdb-search?${sp.toString()}`;
     const res = await edgeFetch(url, 8000);
     if (!res.ok) return [];
@@ -416,6 +376,7 @@ export async function fetchHindiDubbed(): Promise<CatalogItem[]> {
 
 export async function webSearch(query: string): Promise<WebResult[]> {
   try {
+    if (!HAS_EDGE_SEARCH) return [];
     const url = `${SUPABASE_URL}/functions/v1/tmdb-search?action=web-search&query=${encodeURIComponent(query)}`;
     const res = await edgeFetch(url, 8000);
     if (!res.ok) {
@@ -444,6 +405,7 @@ export interface YouTubeVideoResult {
 
 export async function fetchYouTubeVideos(query: string): Promise<YouTubeVideoResult[]> {
   try {
+    if (!HAS_EDGE_SEARCH) return [];
     const url = `${SUPABASE_URL}/functions/v1/tmdb-search?action=youtube-search&query=${encodeURIComponent(query)}`;
     const res = await edgeFetch(url, 8000);
     if (!res.ok) {
