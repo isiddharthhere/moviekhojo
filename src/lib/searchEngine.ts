@@ -32,8 +32,18 @@ export interface WebResult {
   snippet: string;
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL?.trim();
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+const HAS_EDGE_SEARCH = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+
+function localFallback(options: FuzzySearchOptions = {}): CatalogItem[] {
+  return fuzzySearchCatalog('', options).length > 0 ? fuzzySearchCatalog('', options) : LOCAL_CATALOG;
+}
+
+function endpoint(action: string, params = ''): string | null {
+  if (!HAS_EDGE_SEARCH || !SUPABASE_URL) return null;
+  return `${SUPABASE_URL}/functions/v1/tmdb-search?action=${action}${params}`;
+}
 
 function mapContentType(tmdbType: string): CatalogItem['type'] {
   if (tmdbType === 'web_series') return 'web_series';
@@ -84,6 +94,7 @@ function tmdbToCatalogItem(r: TMDBResult): CatalogItem {
 }
 
 async function edgeFetch(url: string, timeoutMs = 8000): Promise<Response> {
+  if (!HAS_EDGE_SEARCH) throw new Error('Supabase movie search is not configured');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -117,7 +128,8 @@ export async function waterfallSearch(
 
   // Layer 1: TMDB via edge function (includes scraper fallback server-side)
   try {
-    const tmdbUrl = `${SUPABASE_URL}/functions/v1/tmdb-search?action=search&query=${encodeURIComponent(query)}`;
+    const tmdbUrl = endpoint('search', `&query=${encodeURIComponent(query)}`);
+    if (!tmdbUrl) throw new Error('Movie API unavailable');
     const res = await edgeFetch(tmdbUrl, 8000);
     if (res.ok) {
       const data: TMDBResponse = await res.json();

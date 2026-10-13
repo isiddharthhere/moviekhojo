@@ -29,8 +29,16 @@ export function PosterFallback({ title, variant = 'portrait', iconSize = 'w-10 h
   const aspectClass = variant === 'portrait' ? 'aspect-[2/3]' : 'aspect-video';
 
   return (
-    <div className={`absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br ${gradient} ${aspectClass}`}>
-      <div className="relative">
+    <div className={`absolute inset-0 flex flex-col items-center justify-center overflow-hidden bg-gradient-to-br ${gradient} ${aspectClass}`}>
+      <img
+        src="https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=600&q=80"
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full object-cover opacity-25"
+        loading="lazy"
+      />
+      <div className="absolute inset-0 bg-gradient-to-br from-ink-950/40 via-transparent to-ink-950/90" />
+      <div className="relative z-10">
         <div className="absolute inset-0 rounded-full bg-primary-500/10 blur-xl" />
         <Film className={`${iconSize} text-primary-400/50 relative z-10`} />
       </div>
