@@ -1,0 +1,7 @@
+[functions.tmdb-search]
+verify_jwt = false
+entrypoint = "./functions/tmdb-search/index.ts"
+
+[functions.ai-recommend]
+verify_jwt = false
+entrypoint = "./functions/ai-recommend/index.ts"
